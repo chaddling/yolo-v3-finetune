@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "yolo-v3-finetune"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "yolo_v3_finetune"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+torch = "^2.5.1"
+lightning = "^2.5.0.post0"
+jupyter = "^1.1.1"
+torchvision = "^0.20.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
