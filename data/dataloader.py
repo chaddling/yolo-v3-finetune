@@ -16,7 +16,7 @@ def create_dataloader(config: Dict) -> DataLoader:
     batch_size = config["dataloaer"]["batch_size"]
     dataset_params = config["dataloader"]["dataset"]
 
-    cls = LVISDataset # TODO configure
+    cls = DetectionDataset # TODO configure
 
     dataset_params.pop("cls")
     dataset = cls(**dataset_params)
@@ -49,13 +49,13 @@ class BaseDataset(Dataset):
         return transforms_list
 
     def __len__(self) -> int:
-        return len(self.image_paths)
+        return len(self.image_files)
 
     def __getitem__(self, idx: int):
         pass
 
 
-class LVISDataset(BaseDataset):
+class DetectionDataset(BaseDataset):
     def __init__(self, image_dir: str, label_dir: str, transform_params: Optional[Dict[str, Dict]]):
         super().__init__(
             image_dir=image_dir, 

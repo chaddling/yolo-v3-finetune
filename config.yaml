@@ -1,7 +1,7 @@
 dataloader:
   batch_size: 64
   dataset:
-    cls: "LVISDataset"
+    cls: "DetectionDataset"
     image_dir: "{root}/{dataset}/{split}/images"
     label_dir: "{root}/{dataset}/{split}/labels"
     transform_params:
