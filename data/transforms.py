@@ -1,0 +1,80 @@
+"""
+Ones we can use directly from torchvision, don't need to add here
+- RandomFlip
+- Resize and Pad
+- HSV (hue/saturation/value) transforms (ColorJitter)
+
+We also need to transform the labels, so we might as well implement here
+
+Additional transforms
+- Mosaic/MixUp
+- Perspectives transformations
+
+In code:
+1. Resize
+2. Perspectives
+3. HSV
+4. Flip (horizontal, vertical)
+
+"""
+
+import torch
+
+import torchvision.transforms.v2 as tv2
+
+from typing import Optional, Union, Tuple
+
+
+class Resize(torch.nn.Module):
+    def __init__(
+        self, 
+        size: Union[int, Tuple[int]], 
+        interpolation: Union[tv2.InterpolationMode, int] = tv2.InterpolationMode.BILINEAR,
+        max_size: Optional[int] = None
+    ):
+        super().__init__()
+        self.transform = tv2.Resize(
+            size=size,
+            interpolation=interpolation,
+            max_size=max_size,
+        )
+
+    def forward(self, image: torch.Tensor, label: torch.Tensor):
+        return self.transform(image), label
+    
+
+class RandomHorizontalFlip(torch.nn.Module):
+    def __init__(self, p: float):
+        self.transform = tv2.RandomHorizontalFlip(p=p)
+
+    def forward(self, image: torch.Tensor, label: torch.Tensor):
+        label[:, 2] = 1 - label[: 2]
+        return self.transform(image), label
+    
+
+class RandomVerticalFlip(torch.nn.Module):
+    def __init__(self, p: float):
+        self.transform = tv2.RandomVerticalFlip(p=p)
+
+    def forward(self, image: torch.Tensor, label: torch.Tensor):
+        label[:, 1] = 1 - label[: 1]
+        return self.transform(image), label
+
+
+class ColorJitter(torch.nn.Module):
+    def __init__(
+        self, 
+        brightness: float = 0.0, 
+        contrast: float = 0.0, 
+        hue: float = 0.0, 
+        saturation:float = 0.0, 
+    ):
+        self.transform = tv2.ColorJitter(
+            brightness=brightness,
+            contrast=contrast,
+            hue=hue,
+            saturation=saturation,
+        )
+
+    def forward(self, image: torch.Tensor, label: torch.Tensor):
+        return self.transform(image), label
