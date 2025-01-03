@@ -5,9 +5,11 @@ import pandas as pd
 import torch
 import torchvision.transforms.v2 as tv2
 
+from data.transforms import Resize, ColorJitter, RandomHorizontalFlip, RandomVerticalFlip
+
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_image
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 
 def create_dataloader() -> DataLoader:
@@ -19,7 +21,12 @@ class BaseDataset(Dataset):
         self, 
         image_dir: str, 
         label_dir: str,
-        transforms: Optional[List[torch.nn.Module]] = None,
+        transforms: Optional[List[Union[torch.nn.Module, tv2.Transform]]] = [
+            Resize(size=640),
+            ColorJitter(brightness=0.1, contrast=0.1, hue=0.1, saturation=0.1), # set in config
+            RandomHorizontalFlip(p=0.1),
+            RandomVerticalFlip(p=0.1),
+        ],
     ):
         image_files = glob.glob(os.path.join(image_dir, "*.jpg"))
         self.image_files = list(sorted(image_files))
@@ -53,7 +60,7 @@ class LVISDataset(BaseDataset):
         pass
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        # TODO image sizes are not uniform, should be the default transform
+        # TODO image sizes are not uniform, should be the default transform, I think yolov3 uses 640?
         # the transforms also need to be applied to the boxes!
         # TODO width/height can be obtained from metadata
         image = read_image(self.image_files[idx])
