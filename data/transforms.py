@@ -1,23 +1,3 @@
-"""
-Ones we can use directly from torchvision, don't need to add here
-- RandomFlip
-- Resize and Pad
-- HSV (hue/saturation/value) transforms (ColorJitter)
-
-We also need to transform the labels, so we might as well implement here
-
-Additional transforms
-- Mosaic/MixUp
-- Perspectives transformations
-
-In code:
-1. Resize
-2. Perspectives
-3. HSV
-4. Flip (horizontal, vertical)
-
-"""
-
 import torch
 
 import torchvision.transforms.v2 as tv2
