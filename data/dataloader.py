@@ -1,10 +1,11 @@
 import os
 import glob
-import importlib
 import logging
 import pandas as pd
 import torch
 import torchvision.transforms.v2 as tv2
+
+import data.transforms
 
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_image
@@ -42,7 +43,7 @@ class BaseDataset(Dataset):
     def get_transforms(self, params: Dict[str, Dict]) -> List[torch.nn.Module]:
         transforms_list = []
         for cls, arg in params.items():
-            transform_cls = importlib.import_module(cls, "data.transforms")
+            transform_cls = getattr(data.transforms, cls)
             transforms_list.append(transform_cls(**arg))
 
         return transforms_list
