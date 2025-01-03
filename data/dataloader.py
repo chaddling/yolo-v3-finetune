@@ -71,6 +71,6 @@ class LVISDataset(BaseDataset):
             pd.read_csv(self.label_files[idx], header=None, sep=" ").values
         )
         if self.transforms:
-            image = self.transforms(image)
+            image, label = self.transforms(image, label)
 
         return image, label
