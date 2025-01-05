@@ -3,7 +3,7 @@ import torch
 
 @pytest.fixture
 def dummy_image() -> torch.Tensor:
-    return torch.rand(3, 256, 256)
+    return torch.rand(3, 420, 360)
 
 @pytest.fixture
 def dummy_label() -> torch.Tensor:

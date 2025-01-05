@@ -1,47 +1,77 @@
 import torch
 
+from torchvision.transforms.functional import resize, pad, hflip, vflip
 import torchvision.transforms.v2 as tv2
 
-from typing import Optional, Union, Tuple
+from typing import Union, Tuple
 
 
 class Resize(torch.nn.Module):
+    """
+    Resizes and pads an input image up to the given size. The bounding box
+    is transformed according to the computed rescaling and padding.
+    """
     def __init__(
         self, 
         size: Union[int, Tuple[int]], 
-        interpolation: Union[tv2.InterpolationMode, int] = tv2.InterpolationMode.BILINEAR,
-        max_size: Optional[int] = None
     ):
-        super().__init__(self)
-        self.transform = tv2.Resize(
-            size=size,
-            interpolation=interpolation,
-            max_size=max_size,
-        )
+        super().__init__()
+        if isinstance(size, tuple):
+            assert len(size) == 2, f"Resize() operation must be given a square image shape, but len(size) = {len(size)}."
+            assert size[0] == size[1], f"Resize() operation must be given a square image shape, but {size[0]} != {size[1]}"
+            size = size[0]
+
+        self.size = size
 
     def forward(self, image: torch.Tensor, label: torch.Tensor):
-        # TODO need to resize the bounding box in `label`
-        return self.transform(image), label
+        w, h = image.shape[-2:]
+        r = min(self.size / w, self.size / h)
+
+        new_w = int(w * r)
+        new_h = int(h * r)
+
+        # size: height then width
+        image = resize(image, size=(new_h, new_w))
+
+        pad_w = int(0.5 * (self.size - new_w))
+        pad_h = int(0.5 * (self.size - new_h))
+
+        # padding: left, top, right, bottom
+        image = pad(image, padding=(pad_w, pad_h, pad_w, pad_h))
+
+        scale_w = new_w / w
+        scale_h = new_h / h
+
+        label[:, 1] = label[:, 1] * scale_w + pad_w / new_w
+        label[:, 2] = label[:, 2] * scale_h + pad_h / new_h
+        label[:, 3] = label[:, 3] * scale_w
+        label[:, 4] = label[:, 4] * scale_h
+
+        return image, label
     
 
 class RandomHorizontalFlip(torch.nn.Module):
     def __init__(self, p: float):
-        super().__init__(self)
-        self.transform = tv2.RandomHorizontalFlip(p=p)
+        super().__init__()
+        self.p = p
 
     def forward(self, image: torch.Tensor, label: torch.Tensor):
-        label[:, 2] = 1 - label[:, 2]
-        return self.transform(image), label
+        if torch.rand(1) < self.p:
+            image = hflip(image)
+            label[:, 2] = 1 - label[:, 2]
+        return image, label
     
 
 class RandomVerticalFlip(torch.nn.Module):
     def __init__(self, p: float):
-        super().__init__(self)
-        self.transform = tv2.RandomVerticalFlip(p=p)
+        super().__init__()
+        self.p = p
 
     def forward(self, image: torch.Tensor, label: torch.Tensor):
-        label[:, 1] = 1 - label[:, 1]
-        return self.transform(image), label
+        if torch.rand(1) < self.p:
+            image = vflip(image)
+            label[:, 1] = 1 - label[:, 1]
+        return image, label
 
 
 class ColorJitter(torch.nn.Module):
