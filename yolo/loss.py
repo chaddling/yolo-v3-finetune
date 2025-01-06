@@ -6,7 +6,9 @@ class YOLOLoss(object):
     def __init__(self):
         """
         Loss terms:
-        1. 
+        1. MSE for bounding box (size = 1)
+        2. BCE for confidence score / IoU (size = 1)
+        3. BCE for classification for class (size = # of classes)
         """
         self.obj_bce = torch.nn.BCEWithLogitsLoss()
         self.class_bce = torch.nn.BCEWithLogitsLoss()
