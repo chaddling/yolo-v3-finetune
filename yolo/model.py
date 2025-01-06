@@ -1,10 +1,13 @@
 import os
 import torch
 
+import lightning as L
+
 from yolo.layers import Detect
 
 from typing import List, Tuple
 
+# TODO anchors need to be scaled in data preprocessing/loss calculation
 _anchors = [
     (10, 13, 16, 30, 33, 23), # P3/8
     (30, 61, 62, 45, 59, 119), # P4/16
@@ -32,6 +35,7 @@ class PretrainedYOLOModel(torch.nn.Module):
         # Removes the top
         self._model.model.model = self._model.model.model[:-1]
 
+        # NOTE we could also probably package this with Lightning module instead
         detect_layer = Detect(
             nc=num_classes, 
             anchors=anchors,
@@ -48,3 +52,19 @@ class PretrainedYOLOModel(torch.nn.Module):
     def forward(self, x):
         x = self._model(x)
         return x
+    
+
+class ModelWrapper(L.LightningModule):
+    def __init__(self, model: torch.nn.Module):
+        super().__init__()
+        self.model = model
+
+    def training_step(self, batch, batch_idx):
+        return
+    
+    def validation_step(self, batch, batch_idx):
+        return
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
