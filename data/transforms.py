@@ -16,8 +16,6 @@ class LabelPreprocessor(torch.nn.Module):
         self.max_boxes = max_boxes
         self.strides = strides
 
-        self.objectness_iou_threshold = 0.5
-
     def standardize_bbox_label(self, label: torch.Tensor, stride: int, size: int) -> torch.Tensor:
         """
         Standardizes box coordinates: (x, y) are normalized by the box stride. (w, h) are
