@@ -7,7 +7,7 @@ import torchvision.transforms.v2 as tv2
 import data.transforms
 
 from torch.utils.data import DataLoader, Dataset
-from torchvision.io import read_image
+from torchvision.io import read_image, ImageReadMode
 from typing import Dict, List, Optional, Tuple
 
 
@@ -74,7 +74,7 @@ class DetectionDataset(BaseDataset):
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor]]]:
         # NOTE width/height can be obtained from metadata, would be needed for inference
-        image = read_image(self.image_files[idx])
+        image = read_image(self.image_files[idx], mode=ImageReadMode.RGB)
         
         label = torch.from_numpy(
             pd.read_csv(self.label_files[idx], header=None, sep=" ").values
