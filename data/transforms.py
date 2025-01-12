@@ -9,10 +9,10 @@ from typing import List, Union, Tuple
 # NOTE do these transforms take into account batch shape?
 # Check that this part of the code doesn't receive gradients (it shouldn't)
 class LabelPreprocessor(torch.nn.Module):
-    def __init__(self, num_classes: int, strides: Tuple[int]):
+    def __init__(self, num_classes: int, max_boxes: int, strides: Tuple[int]):
         super().__init__()
         self.num_classes = num_classes
-        self.max_boxes = 90 # TODO
+        self.max_boxes = max_boxes
         self.strides = strides
 
         self.objectness_iou_threshold = 0.5
@@ -69,12 +69,13 @@ class LabelPreprocessor(torch.nn.Module):
         stride = torch.tensor(stride)
 
         # (c, x, y)
-        indices = label[:, :3]
+        indices = label[:, 0:3]
         indices[:, 1:] = torch.div(indices[:, 1:] - torch.fmod(indices[:, 1:], stride), stride)
-        indices = indices.int().permute(1, 2, 0).view(-1, 3) # (x, y, c)
+        indices = indices.int()
+        indices = torch.cat([indices[:, 1:], indices[:, 0:1]], axis=-1) # (x, y, c)
 
         label_class = torch.sparse_coo_tensor(
-            indices=indices,
+            indices=indices.T,
             values=torch.ones(size=(len(indices),)),
             size=(n_cells, n_cells, self.num_classes),
         )
@@ -84,12 +85,11 @@ class LabelPreprocessor(torch.nn.Module):
 
     def forward(self, image: torch.Tensor, label: torch.Tensor) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor]]]:
         labels = []
-        size = image.size()[0]
-        n_cells = size / stride
+        size = image.size()[-1]
         for stride in self.strides:
             label_box = self.make_bbox_label(label)
 
-            n_cells = size / stride
+            n_cells = int(size / stride)
             label_obj = self.make_objectness_label(label, n_cells, stride)
             label_class = self.make_classification_label(label, n_cells, stride)
         
@@ -179,7 +179,7 @@ class ColorJitter(torch.nn.Module):
         hue: float = 0.0, 
         saturation:float = 0.0, 
     ):
-        super().__init__(self)
+        super().__init__()
         self.transform = tv2.ColorJitter(
             brightness=brightness,
             contrast=contrast,
