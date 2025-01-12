@@ -63,16 +63,19 @@ if __name__ == "__main__":
 
     metadata = json.load(open(f"{HOME}/{annotation_file}", "r"))
     annotations = metadata["annotations"]
-    stats = {m["id"]: (m["width"], m["height"]) for m in metadata["images"]}
+    
+    # stats = {m["id"]: (m["width"], m["height"]) for m in metadata["images"]}
 
     # ~40s to write ~1 million annotations
     # Not too slow, but could be improved by async?
     start = time.perf_counter()
     for a in annotations:
-        id = a["image_id"]
-        image_w, image_h = stats[id]
+        # id = a["image_id"]
+        # image_w, image_h = stats[id]
+
+        # Convert (x, y) top-left box coordinate to box centre
         x, y, w, h = a["bbox"]
-        a["bbox"] = [x / image_w, y / image_h, w / image_w, h / image_h]
+        a["bbox"] = [x + w / 2, y + h / 2, w, h]
         write_annotation(a, label_path)
     
     elapsed = time.perf_counter() - start
