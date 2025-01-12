@@ -19,7 +19,7 @@ def create_dataloader(config: Dict) -> DataLoader:
 
     dataset_params.pop("cls")
     dataset = cls(**dataset_params)
-    return DataLoader(dataset, batch_size=batch_size), dataset
+    return DataLoader(dataset, batch_size=batch_size)
 
 
 class BaseDataset(Dataset):
