@@ -12,8 +12,12 @@ dataloader:
       RandomVerticalFlip:
         p: 0.1
       ColorJitter:
-        brigtness: 0.0
+        brightness: 0.0
         contrast: 0.0
         hue: 0.0
         saturation: 0.0
+      LabelPreprocessor:
+        num_classes: 1203 # TODO probably too large? might be more worthwhile to demo extending from 80 -> 100 classes, let say...
+        max_boxes: 90 # Max # in lvis dataset = 300
+        strides: [8, 16, 32]
 trainer: null
