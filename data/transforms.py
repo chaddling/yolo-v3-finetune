@@ -177,7 +177,7 @@ class RandomHorizontalFlip(torch.nn.Module):
     def forward(self, image: torch.Tensor, label: torch.Tensor) -> Tuple[torch.Tensor]:
         if torch.rand(1) < self.p:
             image = hflip(image)
-            label[:, 2] = 1 - label[:, 2]
+            label[:, 2] = image.shape[-1] - label[:, 2]
         return image, label
     
 
@@ -189,7 +189,7 @@ class RandomVerticalFlip(torch.nn.Module):
     def forward(self, image: torch.Tensor, label: torch.Tensor) -> Tuple[torch.Tensor]:
         if torch.rand(1) < self.p:
             image = vflip(image)
-            label[:, 1] = 1 - label[:, 1]
+            label[:, 1] = image.shape[-1] - label[:, 1]
         return image, label
 
 
