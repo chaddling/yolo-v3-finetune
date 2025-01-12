@@ -40,7 +40,10 @@ class LabelPreprocessor(torch.nn.Module):
         """
         label_box = torch.zeros(size=(self.max_boxes, 4))
         values = label[:, 1:]
-        label_box[0:len(values), :] = values
+        # NOTE some images can contain more than specified max_boxes, should handle this 
+        # properly so we can have a good enough sampling of the classes in the image
+        n_boxes = min(len(values), self.max_boxes)
+        label_box[0:n_boxes, :] = values[0:n_boxes, :]
 
         return label_box
 
@@ -53,19 +56,23 @@ class LabelPreprocessor(torch.nn.Module):
         indices = label[:, 1:3]
         indices = torch.div(indices - torch.fmod(indices, stride), stride)
         indices = indices.int()
+        n_boxes = min(len(indices), self.max_boxes)
+        indices = indices[0:n_boxes, :]
 
         label_obj = torch.sparse_coo_tensor(
-            indices=indices,
+            indices=indices.T,
             values=torch.ones(size=(len(indices),)),
             size=(n_cells, n_cells),
         )
         label_obj = label_obj.to_dense()
-
+        # Deduplicate
+        label_obj = torch.where(label_obj >= 1.0, 1.0, 0.0)
         return label_obj
 
     def make_classification_label(self, label: torch.Tensor, n_cells: int, stride: int) -> torch.Tensor:
         """
         Maps input shape (?, 5) -> (n_cells, n_cells, n_classes)
+        TODO this tensor could become huge
         """
         stride = torch.tensor(stride)
 
@@ -73,6 +80,9 @@ class LabelPreprocessor(torch.nn.Module):
         indices = label[:, 0:3]
         indices[:, 1:] = torch.div(indices[:, 1:] - torch.fmod(indices[:, 1:], stride), stride)
         indices = indices.int()
+        n_boxes = min(len(indices), self.max_boxes)
+        indices = indices[0:n_boxes, ...]
+
         indices = torch.cat([indices[:, 1:], indices[:, 0:1]], axis=-1) # (x, y, c)
 
         label_class = torch.sparse_coo_tensor(
@@ -81,7 +91,7 @@ class LabelPreprocessor(torch.nn.Module):
             size=(n_cells, n_cells, self.num_classes),
         )
         label_class = label_class.to_dense()
-
+        label_class = torch.where(label_class >= 1.0, 1.0, 0.0)
         return label_class
 
     def forward(self, image: torch.Tensor, label: torch.Tensor) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor]]]:

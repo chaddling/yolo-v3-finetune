@@ -3,6 +3,7 @@ import torch
 
 from data.transforms import Resize, RandomHorizontalFlip, RandomVerticalFlip
 
+
 @pytest.mark.parametrize(
     "dummy_image",[
         torch.rand(3, 249, 361),
@@ -24,6 +25,11 @@ def test_resize(dummy_image, dummy_label):
     assert bounding_box[:, 3] < 1, "Normalized h is out of bounds (> 1) after transform."
 
 
+@pytest.mark.parametrize(
+    "dummy_image",[
+        torch.rand(3, 512, 512),
+    ]
+)
 def test_random_horizontal_flip(dummy_image, dummy_label):
     transform = RandomHorizontalFlip(p=1.0)
     _, transformed_label = transform(dummy_image, dummy_label)
@@ -34,6 +40,11 @@ def test_random_horizontal_flip(dummy_image, dummy_label):
     )
 
 
+@pytest.mark.parametrize(
+    "dummy_image",[
+        torch.rand(3, 512, 512),
+    ]
+)
 def test_random_vertical_flip(dummy_image, dummy_label):
     transform = RandomVerticalFlip(p=1.0)
     _, transformed_label = transform(dummy_image, dummy_label)
