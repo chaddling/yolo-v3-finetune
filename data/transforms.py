@@ -37,11 +37,9 @@ class LabelPreprocessor(torch.nn.Module):
         """
         Maps input shape (?, 5) -> (max_boxes, 4)
         """
-        label_box = torch.full(size=(self.max_boxes, 4), fill_value=0.0)
-
-        indices = label[:, 0]
+        label_box = torch.zeros(size=(self.max_boxes, 4))
         values = label[:, 1:]
-        label_box[indices, :] = values
+        label_box[0:len(values), :] = values
 
         return label_box
 
