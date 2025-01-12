@@ -1,6 +1,5 @@
 import os
 import glob
-import logging
 import pandas as pd
 import torch
 import torchvision.transforms.v2 as tv2
@@ -13,14 +12,14 @@ from typing import Dict, List, Optional, Tuple
 
 
 def create_dataloader(config: Dict) -> DataLoader:
-    batch_size = config["dataloaer"]["batch_size"]
+    batch_size = config["dataloader"]["batch_size"]
     dataset_params = config["dataloader"]["dataset"]
 
     cls = DetectionDataset # TODO configure
 
     dataset_params.pop("cls")
     dataset = cls(**dataset_params)
-    return DataLoader(dataset, batch_size=batch_size)
+    return DataLoader(dataset, batch_size=batch_size), dataset
 
 
 class BaseDataset(Dataset):
@@ -56,7 +55,12 @@ class BaseDataset(Dataset):
 
 
 class DetectionDataset(BaseDataset):
-    def __init__(self, image_dir: str, label_dir: str, transform_params: Optional[Dict[str, Dict]]):
+    def __init__(
+        self, 
+        image_dir: str, 
+        label_dir: str, 
+        transform_params: Optional[Dict[str, Dict]],
+    ):
         super().__init__(
             image_dir=image_dir, 
             label_dir=label_dir, 
@@ -68,15 +72,14 @@ class DetectionDataset(BaseDataset):
         """ Ensure alignment between image and label files. """
         pass
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        # TODO width/height can be obtained from metadata
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor]]]:
+        # NOTE width/height can be obtained from metadata, would be needed for inference
         image = read_image(self.image_files[idx])
         
-        # TODO labels' xywh dimensions are not normalized
         label = torch.from_numpy(
             pd.read_csv(self.label_files[idx], header=None, sep=" ").values
         )
         if self.transforms:
-            image, label = self.transforms(image, label)
+            image, labels = self.transforms(image, label)
 
-        return image, label
+        return image, labels
