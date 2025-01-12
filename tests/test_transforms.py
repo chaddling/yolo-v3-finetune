@@ -1,7 +1,17 @@
+import pytest
 import torch
 
 from data.transforms import Resize, RandomHorizontalFlip, RandomVerticalFlip
 
+@pytest.mark.parametrize(
+    "dummy_image",[
+        torch.rand(3, 249, 361),
+        torch.rand(3, 361, 249),
+        torch.rand(3, 412, 249),
+        torch.rand(3, 249, 412),
+        torch.rand(3, 248, 612),
+    ]
+)
 def test_resize(dummy_image, dummy_label):
     size = 512
     transformed_image, transformed_label = Resize(size)(dummy_image, dummy_label)

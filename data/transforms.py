@@ -2,6 +2,7 @@ import torch
 
 import torchvision.transforms.v2 as tv2
 
+from math import ceil, floor
 from torchvision.transforms.functional import resize, pad, hflip, vflip
 
 from typing import List, Union, Tuple
@@ -129,12 +130,25 @@ class Resize(torch.nn.Module):
 
         # size: height then width
         image = resize(image, size=(new_h, new_w))
+        pad_w = 0.5 * (self.size - new_w)
+        pad_h = 0.5 * (self.size - new_h)
 
-        pad_w = int(0.5 * (self.size - new_w))
-        pad_h = int(0.5 * (self.size - new_h))
+        if (self.size - new_w) % 2 == 0:
+            pad_l = int(pad_w)
+            pad_r = int(pad_w)
+        else:
+            pad_l = floor(pad_w)
+            pad_r = ceil(pad_w)
 
+        if (self.size - new_h) % 2 == 0:
+            pad_t = int(pad_h)
+            pad_b = int(pad_h)
+        else:
+            pad_t = floor(pad_h)
+            pad_b = ceil(pad_h)
+        
         # padding: left, top, right, bottom
-        image = pad(image, padding=(pad_w, pad_h, pad_w, pad_h))
+        image = pad(image, padding=(pad_l, pad_t, pad_r, pad_b))
 
         scale_w = new_w / w
         scale_h = new_h / h
