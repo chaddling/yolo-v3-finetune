@@ -3,6 +3,7 @@ import glob
 import pandas as pd
 import torch
 import torchvision.transforms.v2 as tv2
+import torch.nn.functional as F
 
 import data.transforms
 
@@ -19,7 +20,11 @@ def create_dataloader(config: Dict) -> DataLoader:
 
     dataset_params.pop("cls")
     dataset = cls(**dataset_params)
-    return DataLoader(dataset, batch_size=batch_size)
+    return DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        collate_fn=DetectionDataset.collate
+    )
 
 
 class BaseDataset(Dataset):
@@ -83,3 +88,15 @@ class DetectionDataset(BaseDataset):
             image, labels = self.transforms(image, label)
 
         return image, labels
+    
+    @staticmethod
+    def collate(batch):
+        """
+        returns label in shape (?, 6). ? is the number of objects in this batch
+        """
+        images, labels = zip(*batch)
+        labels = list(labels)
+        for i, label in enumerate(labels):
+            labels[i] = F.pad(label, (1, 0), value=i)
+
+        return (torch.stack(images, dim=0), torch.cat(labels, dim=0))
