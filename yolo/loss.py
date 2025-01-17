@@ -4,8 +4,6 @@ import torch.nn.functional as F
 from torchvision.ops import box_iou, box_convert
 from typing import List, Tuple
 
-from data.utils import make_classification_label, make_objectness_label, make_grid_idx, make_one_hot_label, obj_anchors_ious
-
 
 # TODO anchors need to be scaled in data preprocessing/loss calculation
 all_anchors = [
