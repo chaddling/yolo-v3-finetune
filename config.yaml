@@ -1,12 +1,12 @@
 dataloader:
-  batch_size: 64
+  batch_size: 4
   dataset:
     cls: "DetectionDataset"
     image_dir: "{root}/{dataset}/{split}/images"
     label_dir: "{root}/{dataset}/{split}/labels"
     transform_params:
       Resize:
-        size: 640
+        size: 512
       RandomHorizontalFlip: 
         p: 0.1
       RandomVerticalFlip:
@@ -16,8 +16,4 @@ dataloader:
         contrast: 0.0
         hue: 0.0
         saturation: 0.0
-      LabelPreprocessor:
-        num_classes: 1203 # TODO probably too large? might be more worthwhile to demo extending from 80 -> 100 classes, let say...
-        max_boxes: 90 # Max # in lvis dataset = 300
-        strides: [8, 16, 32]
 trainer: null
