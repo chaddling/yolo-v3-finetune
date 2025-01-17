@@ -1,5 +1,6 @@
 import os
 import glob
+import logging
 import pandas as pd
 import torch
 import torchvision.transforms.v2 as tv2
@@ -11,15 +12,17 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_image, ImageReadMode
 from typing import Dict, List, Optional, Tuple
 
+logging.getLogger().setLevel(logging.INFO)
 
-def create_dataloader(config: Dict) -> DataLoader:
+
+def create_dataloader(config: Dict, split: str) -> DataLoader:
     batch_size = config["dataloader"]["batch_size"]
     dataset_params = config["dataloader"]["dataset"]
 
     cls = DetectionDataset # TODO configure
 
     dataset_params.pop("cls")
-    dataset = cls(**dataset_params)
+    dataset = cls(**dataset_params, split=split)
     return DataLoader(
         dataset, 
         batch_size=batch_size, 
@@ -64,18 +67,49 @@ class DetectionDataset(BaseDataset):
         self, 
         image_dir: str, 
         label_dir: str, 
+        split: str,
         transform_params: Optional[Dict[str, Dict]],
+        dataset: str = "lvis",
     ):
+        root = os.getenv("HOME")
+        image_dir = image_dir.format(
+            root=root, dataset=dataset, split=split
+        )
+        label_dir = label_dir.format(
+            root=root, dataset=dataset, split=split
+        )
         super().__init__(
             image_dir=image_dir, 
             label_dir=label_dir, 
             transform_params=transform_params,
         )
-        self.validate_data_files()
+
+        if split in ("train", "va"):
+            self.validate_data_files()
     
     def validate_data_files(self) -> None:
         """ Ensure alignment between image and label files. """
-        pass
+        num_image_files = len(self.image_files)
+        num_label_files = len(self.label_files)
+        logging.info(f"Retrieved {num_image_files} images files and {num_label_files} label files from local directories.")
+
+        image_files = {f.split("/")[-1].rstrip(".jpg"): f for f in self.image_files}
+        label_files = {f.split("/")[-1].rstrip(".txt"): f for f in self.label_files}
+
+        reference = label_files
+        other = image_files
+        if num_image_files < num_label_files:
+            reference = image_files
+            other = label_files
+            logging.info("Using the list of image files/names as reference for indexing.")
+        else:
+            logging.info("Using the list of label files/names as reference for indexing.")
+
+        keys = [k for k in reference.keys() if k in other.keys()]
+        logging.info(f"{len(keys)} matching file names found.")
+
+        self.image_files = [image_files[k] for k in keys]
+        self.label_files = [label_files[k] for k in keys]
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor]]]:
         # NOTE width/height can be obtained from metadata, would be needed for inference
