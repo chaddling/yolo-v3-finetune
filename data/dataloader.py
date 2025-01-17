@@ -1,26 +1,30 @@
 import os
 import glob
-import logging
 import pandas as pd
 import torch
 import torchvision.transforms.v2 as tv2
+import torch.nn.functional as F
 
 import data.transforms
 
 from torch.utils.data import DataLoader, Dataset
-from torchvision.io import read_image
+from torchvision.io import read_image, ImageReadMode
 from typing import Dict, List, Optional, Tuple
 
 
 def create_dataloader(config: Dict) -> DataLoader:
-    batch_size = config["dataloaer"]["batch_size"]
+    batch_size = config["dataloader"]["batch_size"]
     dataset_params = config["dataloader"]["dataset"]
 
     cls = DetectionDataset # TODO configure
 
     dataset_params.pop("cls")
     dataset = cls(**dataset_params)
-    return DataLoader(dataset, batch_size=batch_size)
+    return DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        collate_fn=DetectionDataset.collate
+    )
 
 
 class BaseDataset(Dataset):
@@ -56,7 +60,12 @@ class BaseDataset(Dataset):
 
 
 class DetectionDataset(BaseDataset):
-    def __init__(self, image_dir: str, label_dir: str, transform_params: Optional[Dict[str, Dict]]):
+    def __init__(
+        self, 
+        image_dir: str, 
+        label_dir: str, 
+        transform_params: Optional[Dict[str, Dict]],
+    ):
         super().__init__(
             image_dir=image_dir, 
             label_dir=label_dir, 
@@ -68,15 +77,26 @@ class DetectionDataset(BaseDataset):
         """ Ensure alignment between image and label files. """
         pass
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        # TODO width/height can be obtained from metadata
-        image = read_image(self.image_files[idx])
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, List[Tuple[torch.Tensor]]]:
+        # NOTE width/height can be obtained from metadata, would be needed for inference
+        image = read_image(self.image_files[idx], mode=ImageReadMode.RGB)
         
-        # TODO labels' xywh dimensions are not normalized
         label = torch.from_numpy(
             pd.read_csv(self.label_files[idx], header=None, sep=" ").values
         )
         if self.transforms:
-            image, label = self.transforms(image, label)
+            image, labels = self.transforms(image, label)
 
-        return image, label
+        return image, labels
+    
+    @staticmethod
+    def collate(batch):
+        """
+        returns label in shape (?, 6). ? is the number of objects in this batch
+        """
+        images, labels = zip(*batch)
+        labels = list(labels)
+        for i, label in enumerate(labels):
+            labels[i] = F.pad(label, (1, 0), value=i)
+
+        return (torch.stack(images, dim=0), torch.cat(labels, dim=0))

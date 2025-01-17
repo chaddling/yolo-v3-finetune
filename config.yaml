@@ -1,18 +1,18 @@
 dataloader:
-  batch_size: 64
+  batch_size: 4
   dataset:
     cls: "DetectionDataset"
     image_dir: "{root}/{dataset}/{split}/images"
     label_dir: "{root}/{dataset}/{split}/labels"
     transform_params:
       Resize:
-        size: 640
+        size: 512
       RandomHorizontalFlip: 
         p: 0.1
       RandomVerticalFlip:
         p: 0.1
       ColorJitter:
-        brigtness: 0.0
+        brightness: 0.0
         contrast: 0.0
         hue: 0.0
         saturation: 0.0
