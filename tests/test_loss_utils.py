@@ -6,7 +6,7 @@ from yolo.loss_utils import (
     make_grid_idx, 
     make_one_hot_label, 
     standardize_label_box,
-    compute_threshold_mask
+    compute_prediction_mask
 )
 
 torch.manual_seed(0)
@@ -26,11 +26,11 @@ def test_standardize_label_box(image_size, num_objects, anchors, stride):
     assert box.shape == label_box.shape
 
 
-def test_compute_threshold_mask(pred_index_shape, image_size, num_objects, ignore_threshold):
+def test_compute_prediction_mask(pred_index_shape, image_size, num_objects, ignore_threshold):
     pred_box = torch.rand(size=(*pred_index_shape, 4))
     pred_box = pred_box * image_size
     label_box = torch.rand(size=(num_objects, 4))
-    mask = compute_threshold_mask(pred_box, label_box, ignore_threshold)
+    mask = compute_prediction_mask(pred_box, label_box, ignore_threshold)
     assert mask.shape == pred_index_shape
 
 

@@ -41,7 +41,7 @@ def standardize_label_box(label_box: torch.Tensor, best_idx: torch.Tensor, ancho
     return torch.cat([x, y, w, h]).view(shape).T
 
 
-def compute_threshold_mask(pred_box: torch.Tensor, label_box: torch.Tensor, ignore_threshold: float) -> torch.Tensor:
+def compute_prediction_mask(pred_box: torch.Tensor, label_box: torch.Tensor, ignore_threshold: float) -> torch.Tensor:
     """
     Returns a boolean mask computed by overlapping the predictions in each cell
     with the ground truth bounding box. Each cell is responsible for `na` predictions equal
