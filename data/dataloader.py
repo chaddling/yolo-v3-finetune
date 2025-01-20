@@ -15,9 +15,9 @@ from typing import Dict, List, Optional, Tuple
 logging.getLogger().setLevel(logging.INFO)
 
 
-def create_dataloader(config: Dict, split: str) -> DataLoader:
-    batch_size = config["dataloader"]["batch_size"]
-    dataset_params = config["dataloader"]["dataset"]
+def create_dataloader(dataloader_config: Dict, split: str) -> DataLoader:
+    batch_size = dataloader_config["batch_size"]
+    dataset_params = dataloader_config["dataset"]
 
     cls = DetectionDataset # TODO configure
 
@@ -78,6 +78,10 @@ class DetectionDataset(BaseDataset):
         label_dir = label_dir.format(
             root=root, dataset=dataset, split=split
         )
+
+        if split == "val":
+            transform_params = {k: v for k, v in transform_params if k == "Resize"}
+
         super().__init__(
             image_dir=image_dir, 
             label_dir=label_dir, 
