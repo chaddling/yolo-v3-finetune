@@ -21,7 +21,7 @@ def create_dataloader(dataloader_config: Dict, split: str) -> DataLoader:
 
     cls = DetectionDataset # TODO configure
 
-    dataset_params.pop("cls")
+    dataset_params = {k: v for k, v in dataset_params.items() if k != "cls"}
     dataset = cls(**dataset_params, split=split)
     return DataLoader(
         dataset, 
@@ -80,7 +80,7 @@ class DetectionDataset(BaseDataset):
         )
 
         if split == "val":
-            transform_params = {k: v for k, v in transform_params if k == "Resize"}
+            transform_params = {k: v for k, v in transform_params.items() if k == "Resize"}
 
         super().__init__(
             image_dir=image_dir, 
@@ -88,7 +88,7 @@ class DetectionDataset(BaseDataset):
             transform_params=transform_params,
         )
 
-        if split in ("train", "va"):
+        if split in ("train", "val"):
             self.validate_data_files()
     
     def validate_data_files(self) -> None:
