@@ -174,3 +174,4 @@ cython_debug/
 weights/
 *.pt
 lightning_logs/
+tensorboard/
