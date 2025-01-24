@@ -5,6 +5,8 @@ import lightning as L
 from data.dataloader import create_dataloader
 from yolo.model import PretrainedYOLOModel, ModelWrapper
 
+from lightning.pytorch.loggers import TensorBoardLogger
+
 
 if __name__ == "__main__":
     with open("./config.yaml", "r") as f:
@@ -12,7 +14,7 @@ if __name__ == "__main__":
 
     dataloader_config = config.pop("dataloader")
     train_loader = create_dataloader(dataloader_config, split="train")
-    #val_loader = create_dataloader(dataloader_config, split="val")
+    val_loader = create_dataloader(dataloader_config, split="val")
 
     train_config = config.pop("train")
     model = PretrainedYOLOModel(
@@ -26,6 +28,8 @@ if __name__ == "__main__":
     trainer = L.Trainer(
         accelerator="gpu",
         limit_train_batches=1,
-        max_epochs=5,
+        limit_val_batches=1,
+        max_epochs=1,
+        logger=TensorBoardLogger(save_dir="tensorboard")
     )
-    trainer.fit(wrapped_model, train_loader)
+    trainer.fit(wrapped_model, train_loader, val_loader)
