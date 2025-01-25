@@ -32,7 +32,7 @@ class Resize(torch.nn.Module):
         """
         # This could be retrieved from the metadata
         # should use metadata for inference
-        w, h = image.shape[-2:]
+        h, w = image.shape[-2:]
         r = min(self.size / w, self.size / h)
 
         new_w = int(w * r)
@@ -60,13 +60,10 @@ class Resize(torch.nn.Module):
         # padding: left, top, right, bottom
         image = pad(image, padding=(pad_l, pad_t, pad_r, pad_b))
 
-        scale_w = new_w / w
-        scale_h = new_h / h
-
-        label[:, 1] = label[:, 1] * scale_w
-        label[:, 2] = label[:, 2] * scale_h
-        label[:, 3] = label[:, 3] * scale_w
-        label[:, 4] = label[:, 4] * scale_h
+        label[:, 1] = label[:, 1] * r + pad_l
+        label[:, 2] = label[:, 2] * r + pad_t
+        label[:, 3] = label[:, 3] * r
+        label[:, 4] = label[:, 4] * r
 
         return image, label
     
