@@ -93,78 +93,75 @@ class ModelWrapper(L.LightningModule):
         inputs, label = batch
         outputs = self.model(inputs.float())
 
-        bs = inputs.shape[0]
-        batch_idx, label = torch.split(label, [1, 5], dim=-1)
-        batch_idx = batch_idx.int()
+        n_obj = label.shape[0]
+
+        b_idx, label = torch.split(label, [1, 5], dim=-1)
+        b_idx = b_idx.int()
         label_box = label[:, 1:]
-        label_class = label[:, [0]]
+        label_class = label[:, 0]
 
         targets = [
             {
-                "boxes": label_box[torch.where(batch_idx.squeeze() == i)],
-                "labels": label_class[torch.where(batch_idx.squeeze() == i)].int().squeeze(),
+                "boxes": label_box,
+                "labels": label_class.int(),
             }
-            for i in torch.arange(bs)
         ]
 
+        # Could be done in the layer?
         preds_box = []
         preds_obj = []
         preds_class = []
         for pred, loss in zip(outputs, self.yolo_loss):
+            # NOTE even though this work in the validation loop,
+            # in the test setting we don't have the label available so we can't filter boxes like this!
             grid_idx = make_grid_idx(label, loss.stride)
             x_idx, y_idx = grid_idx.int().T
+
             pred_box, pred_obj, pred_class = torch.split(pred, [4, 1, self.model.num_classes], dim=-1)
             pred_box = get_box_coordinates(pred_box, loss.anchors, loss.stride)
-            
-            # Localize predictions to batch element + cells
-            # NOTE is this cell indexing not done correctly?
-            pred_box = pred_box[batch_idx.squeeze(), :, x_idx, y_idx, :]
-            pred_obj = pred_obj[batch_idx.squeeze(), :, x_idx, y_idx, :].sigmoid()
-            pred_class = pred_class[batch_idx.squeeze(), :, x_idx, y_idx, :].sigmoid()
+            pred_box = pred_box[b_idx, :, x_idx, y_idx, :]
+            pred_obj = pred_obj[b_idx, :, x_idx, y_idx, :]
+            pred_class = pred_class[b_idx, :, x_idx, y_idx, :]
 
-            preds_box.append(pred_box)
-            preds_obj.append(pred_obj)
-            preds_class.append(pred_class)
+            preds_box.append(pred_box.view(n_obj, -1, 4))
+            preds_obj.append(pred_obj.sigmoid().view(n_obj, -1, 1))
+            preds_class.append(pred_class.sigmoid().view(n_obj, -1, self.model.num_classes))
 
-        # predictions per batch element per (anchor, cell) index
         pred_box = torch.cat(preds_box, dim=1)
         pred_obj = torch.cat(preds_obj, dim=1)
         pred_class = torch.cat(preds_class, dim=1)
+
         pred_conf = pred_class * pred_obj
+        conf_mask = pred_conf >= 0.7
+        conf_mask = conf_mask.view(-1, self.model.num_classes)
 
-        preds = []
-        for i in range(bs):
-            batch_idx_mask = batch_idx.squeeze() == i
+        flat_conf_idxs, conf_labels = conf_mask.nonzero().T
+        conf_idxs = torch.unravel_index(flat_conf_idxs, shape=(n_obj, 9 * n_obj))
 
-            p = pred_box[batch_idx_mask]
-            pc = pred_conf[batch_idx_mask]
-            # n_obj in this batch element/image
-            n_obj, n_anchors, _ = p.shape
+        pred_box = pred_box[conf_idxs[0], conf_idxs[1], :]
+        pred_scores = pred_conf[conf_idxs[0], conf_idxs[1], conf_labels]
+        conf_labels = conf_labels[flat_conf_idxs]
 
-            conf_mask = pc.view(-1, self.model.num_classes) > 0.7
-            conf_idx, cl = conf_mask.nonzero().T # conf_idx.max() < n_obj * n_anchors, cl is the "label"
+        selected = batched_nms(
+            boxes=box_convert(pred_box, "cxcywh", "xyxy"),
+            scores=pred_scores,
+            idxs=conf_labels,
+            iou_threshold=0.5,
+        )
 
-            p = p.view(-1, 4)[conf_idx, :]
-            pc = pc.view(-1)[conf_idx]
-            nms_flat_idx = batched_nms(
-                boxes=box_convert(p, "cxcywh", "xyxy"), 
-                scores=pc, 
-                idxs=cl,
-                iou_threshold=0.5
-            )
-            preds.append(
-                {
-                    "boxes": p[nms_flat_idx, :],
-                    "scores": pc[nms_flat_idx],
-                    "labels": cl[nms_flat_idx].int(),
-                }
-            )
-
+        preds = [
+            {
+                "boxes": pred_box.view(-1, 4)[selected, :],
+                "scores": pred_scores.view(-1)[selected],
+                "labels": conf_labels[selected].int(),
+            }
+        ]
         self.mean_avg_precision.update(preds, targets)
 
 
     def on_validation_epoch_end(self):
-        self.log_dict(self.mean_avg_precision.compute())
+        map_metrics = self.mean_avg_precision.compute()
+        self.log_dict({k: map_metrics[k] for k in ("map_50", "map_75")})
         self.mean_avg_precision.reset()
 
 
