@@ -173,3 +173,5 @@ cython_debug/
 # Artifacts
 weights/
 *.pt
+lightning_logs/
+tensorboard/

@@ -14,9 +14,11 @@ def get_box_coordinates(pred_box: torch.Tensor, anchors: torch.Tensor, stride: i
     grid = torch.zeros((nx, ny))
     idx = torch.cat(torch.where(grid == 0)).view(2, -1).T.view(1, 1, nx, ny, 2) # could probably be cached
     offset = idx.repeat(bs, na, 1, 1, 1)
+    offset = offset.to("cuda")
 
     anchors = anchors.view(1, na, 1, 1, 2)
     anchors = anchors.repeat(bs, 1, nx, ny, 1)
+    anchors = anchors.to("cuda")
 
     box[..., 0:2] = pred_box[..., 0:2].sigmoid() + offset * stride
     box[..., 2:4] = anchors * torch.exp(pred_box[..., 2:4])
@@ -24,17 +26,16 @@ def get_box_coordinates(pred_box: torch.Tensor, anchors: torch.Tensor, stride: i
     return box
 
 
-def standardize_label_box(label_box: torch.Tensor, best_idx: torch.Tensor, anchors: torch.Tensor, stride: int) -> torch.Tensor:
+def standardize_label_box(label_box: torch.Tensor, best_idx: torch.Tensor, anchors: torch.Tensor, stride: torch.Tensor) -> torch.Tensor:
     """
     Standardizes box coordinates. (x, y) is measured as the offset to the 
     nearest cell and is normalized by stride, while (w, h) are arguments to the exponents.
     """
     x, y, w, h = label_box.T # shapes = (?, 1)
     shape = label_box.T.shape
-    s = torch.tensor(stride).float()
 
-    x = torch.div(torch.fmod(x, s), s)
-    y = torch.div(torch.fmod(y, s), s)
+    x = torch.div(torch.fmod(x, stride), stride)
+    y = torch.div(torch.fmod(y, stride), stride)
     w = torch.log(w / anchors[best_idx.squeeze(), 0] + 1e-16)
     h = torch.log(h / anchors[best_idx.squeeze(), 1] + 1e-16)
 
@@ -67,7 +68,7 @@ def obj_anchors_ious(label_box: torch.Tensor, all_anchors: torch.Tensor):
     """
     xy = label_box[:, 0:2]
     label_rect = F.pad(xy, (2, 0))
-    anchor_rect = F.pad(all_anchors.view(-1, 2), (2,0))
+    anchor_rect = F.pad(all_anchors.view(-1, 2), (2,0)).to("cuda")
 
     ious = box_iou(
         boxes1=box_convert(label_rect, "cxcywh", "xyxy"),
@@ -78,7 +79,7 @@ def obj_anchors_ious(label_box: torch.Tensor, all_anchors: torch.Tensor):
 
 def make_one_hot_label(label: torch.Tensor, num_classes: int):
     c = label[:, 0].squeeze()
-    one_hot = torch.eye(n=num_classes)
+    one_hot = torch.eye(n=num_classes).to("cuda")
     return one_hot[c.int()]
 
 

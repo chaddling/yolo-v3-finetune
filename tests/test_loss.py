@@ -2,6 +2,8 @@ import torch
 
 from yolo.loss import YOLOLoss
 
+# NOTE something flaky about this test
+# Also the casting .to(device) kinda messes up all the tests
 def test_loss(
     num_classes, 
     stride, 
