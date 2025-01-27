@@ -87,7 +87,8 @@ class YOLOLoss(object):
         # shapes: (bs, na, nx, ny)
         # pred__mask should be set to True, where label_obj == 1?
         # e.g. https://github.com/w86763777/pytorch-simple-yolov3/blob/fb08b7c83493bdad3c0d60f8446a2018827b53a1/yolov3/models/layers.py#L237
-        object_loss = pred_mask * self.bce(pred_obj.squeeze(), label_obj)
+        # NOTE maybe fix this, it doesn't handle batch size=1 otherwise.
+        object_loss = pred_mask * self.bce(pred_obj.squeeze(), label_obj.squeeze())
         object_loss = object_loss.sum() # sum or mean?
 
         class_loss = self.bce(pred_class[bs_idx, a_idx, x_idx, y_idx, :], label_class).sum()
