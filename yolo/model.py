@@ -92,8 +92,7 @@ class ModelWrapper(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         inputs, label = batch
         outputs = self.model(inputs.float())
-
-        n_obj = label.shape[0]
+        bs = inputs.shape[0]
 
         b_idx, label = torch.split(label, [1, 5], dim=-1)
         b_idx = b_idx.int()
@@ -102,9 +101,10 @@ class ModelWrapper(L.LightningModule):
 
         targets = [
             {
-                "boxes": label_box,
-                "labels": label_class.int(),
+                "boxes": label_box[b_idx.squeeze() == i, :],
+                "labels": label_class.int()[b_idx.squeeze() == i],
             }
+            for i in range(bs)
         ]
 
         # Could be done in the layer?
@@ -112,49 +112,48 @@ class ModelWrapper(L.LightningModule):
         preds_obj = []
         preds_class = []
         for pred, loss in zip(outputs, self.yolo_loss):
-            # NOTE even though this work in the validation loop,
-            # in the test setting we don't have the label available so we can't filter boxes like this!
-            grid_idx = make_grid_idx(label, loss.stride)
-            x_idx, y_idx = grid_idx.int().T
-
             pred_box, pred_obj, pred_class = torch.split(pred, [4, 1, self.model.num_classes], dim=-1)
             pred_box = get_box_coordinates(pred_box, loss.anchors, loss.stride)
-            pred_box = pred_box[b_idx, :, x_idx, y_idx, :]
-            pred_obj = pred_obj[b_idx, :, x_idx, y_idx, :]
-            pred_class = pred_class[b_idx, :, x_idx, y_idx, :]
 
-            preds_box.append(pred_box.view(n_obj, -1, 4))
-            preds_obj.append(pred_obj.sigmoid().view(n_obj, -1, 1))
-            preds_class.append(pred_class.sigmoid().view(n_obj, -1, self.model.num_classes))
+            preds_box.append(pred_box.view(bs, -1, 4))
+            preds_obj.append(pred_obj.sigmoid().view(bs, -1, 1))
+            preds_class.append(pred_class.sigmoid().view(bs, -1, self.model.num_classes))
 
-        pred_box = torch.cat(preds_box, dim=1)
+        pred_box = torch.cat(preds_box, dim=1)  # shape[0] = bs
+        c = pred_box.shape[1] # combined dimension of anchors, cells, over all scales
+        
         pred_obj = torch.cat(preds_obj, dim=1)
         pred_class = torch.cat(preds_class, dim=1)
 
         pred_conf = pred_class * pred_obj
         conf_mask = pred_conf >= 0.7
-        conf_mask = conf_mask.view(-1, self.model.num_classes)
+        b_idx, c_idx, labels_idx = conf_mask.nonzero().T
 
-        flat_conf_idxs, conf_labels = conf_mask.nonzero().T
-        conf_idxs = torch.unravel_index(flat_conf_idxs, shape=(n_obj, 9 * n_obj))
+        pred_box = pred_box[b_idx, c_idx, :]
+        pred_scores = pred_conf[b_idx, c_idx, labels_idx]
 
-        pred_box = pred_box[conf_idxs[0], conf_idxs[1], :]
-        pred_scores = pred_conf[conf_idxs[0], conf_idxs[1], conf_labels]
-        conf_labels = conf_labels[flat_conf_idxs]
+        # Maps (b_idx, c_idx) to a batch element in the original index space arange(0, bs)
+        orig_batch_idx = torch.stack([torch.arange(0, bs)] * c, dim=1).to("cuda")
+        orig_batch_idx = orig_batch_idx[b_idx, c_idx]
 
         selected = batched_nms(
             boxes=box_convert(pred_box, "cxcywh", "xyxy"),
             scores=pred_scores,
-            idxs=conf_labels,
+            idxs=labels_idx,
             iou_threshold=0.5,
         )
+        pred_box = pred_box[selected, :]
+        pred_scores = pred_scores[selected]
+        labels_idx = labels_idx[selected]
+        orig_batch_idx = orig_batch_idx[selected]
 
         preds = [
             {
-                "boxes": pred_box.view(-1, 4)[selected, :],
-                "scores": pred_scores.view(-1)[selected],
-                "labels": conf_labels[selected].int(),
+                "boxes": pred_box[orig_batch_idx == i, :],
+                "scores": pred_scores[orig_batch_idx == i],
+                "labels": labels_idx[orig_batch_idx == i],
             }
+            for i in range(bs)
         ]
         self.mean_avg_precision.update(preds, targets)
 
