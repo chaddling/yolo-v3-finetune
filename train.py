@@ -29,7 +29,8 @@ if __name__ == "__main__":
         accelerator="gpu",
         limit_train_batches=1,
         limit_val_batches=1,
-        max_epochs=1,
+        max_epochs=3,
+        log_every_n_steps=1,
         logger=TensorBoardLogger(save_dir="tensorboard")
     )
     trainer.fit(wrapped_model, train_loader, val_loader)

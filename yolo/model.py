@@ -81,11 +81,11 @@ class ModelWrapper(L.LightningModule):
         inputs, label = batch
         preds = self.model(inputs.float())
 
-        total_loss = 0
+        total_loss = torch.tensor(0.0).to("cuda")
         for pred, loss in zip(preds, self.yolo_loss):
             total_loss += loss(pred, label.float())
 
-        self.log("train_loss", total_loss, logger=True)
+        self.log("train_loss", total_loss, prog_bar=True, logger=True)
         return total_loss
     
 
