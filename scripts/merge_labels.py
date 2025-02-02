@@ -202,7 +202,7 @@ if __name__ == "__main__":
             new_records.append(
                 {
                     "id": annotation_id + 1,
-                    "image_id": lvis_images.loc[c["coco_url"]],
+                    "image_id": lvis_images.loc[c["coco_url"]].image_id,
                     "category_id": coco_ids_map[c["category_id"]],
                     "segmentation": c["segmentation"],
                     "area": c["area"],
@@ -218,9 +218,9 @@ if __name__ == "__main__":
     lvis_annotations = pd.concat([lvis_annotations, new_df], axis=0)
     logging.info(f"After new annotations: {len(lvis_annotations)}")
 
-    lvis_train["annotations"] = ast.literal_eval(
-        lvis_annotations.to_json(orient="records")
-    )
+    lvis_metadata["annotations"] = [
+        x.to_dict() for _, x in lvis_annotations.iterrows()
+    ]
 
     with open(os.path.join(HOME, "merged_lvis_v1_train.json"), "w") as f:
-        json.dump(lvis_train, f)
+        json.dump(lvis_metadata, f)
