@@ -1,3 +1,4 @@
+import ast
 import json
 import logging
 import os
@@ -93,51 +94,133 @@ COCO_SYNSET_CATEGORIES = [
 ]
 
 
+def read_coco_metadata(file_path: str) -> dict:
+    with open(file_path, "r") as f:
+        metadata = json.load(f)
+    return metadata
+
+
 if __name__ == "__main__":
     lvis_train = os.path.join(HOME, "lvis_v1_train.json")
     try:
         with open(lvis_train, "r") as f:
-            metadata = json.load(f)
+            lvis_metadata = json.load(f)
     except FileNotFoundError as e:
         raise(e)
     
-    categories = metadata["categories"]
-    df = pd.DataFrame.from_records(categories)
-    df = df.set_index("synset")
+    lvis_categories = lvis_metadata["categories"]
+    lvis_categories = pd.DataFrame.from_records(lvis_categories)
+    lvis_categories = lvis_categories.set_index("synset")
 
-    merged_vocabs = []
     unmerged_synset = []
     idx = 1
+    coco_vocabs = []
+
     for c in COCO_SYNSET_CATEGORIES:
         synset = c["synset"]
         try:
-            vocab = df.loc[synset, "name"]
+            vocab = lvis_categories.loc[synset, "name"]
         except KeyError:
             unmerged_synset.append(c)
             logging.info(f"Unmerged COCO synset: {c}.")
 
-        merged_vocabs.append({"name": vocab, "synset": synset, "coco_id": c["coco_cat_id"], "lvis_id": None, "merged_id": idx})
-        idx += 1
-
-
-    logging.info(f"Found {len(unmerged_synset)} from COCO_SYNSET_CATEGORIES.")
-
-    merged_synset = [x["synset"] for x in merged_vocabs]
-    df = df.loc[[x for x in df.index if x not in merged_synset]]
-
-    for synset, row in df.iterrows():
-        merged_vocabs.append(
+        coco_vocabs.append(
             {
-                "name": row["name"],
-                "synset": synset,
-                "coco_id": None,
-                "lvis_id": row["id"],
-                "merged_id": idx,
+                "name": vocab, 
+                "synset": synset, 
+                "coco_id": int(c["coco_cat_id"]), 
+                "merged_id": idx
             }
         )
         idx += 1
 
-    logging.info(f"Final number of categories after merging: {len(merged_vocabs)}.")
+    coco_vocabs = pd.DataFrame.from_records(coco_vocabs).set_index("synset")
 
-    # TODO now we have to edit and merge the annotations in the images
-    # using the merged labels
+    logging.info(f"Found {len(unmerged_synset)} from COCO_SYNSET_CATEGORIES.")
+
+    lvis_vocabs = []
+    for synset, row in lvis_categories.iterrows():
+        merged_id = idx
+        is_coco = False
+        if synset in coco_vocabs.index:
+            merged_id = coco_vocabs.loc[synset].merged_id
+            is_coco = True
+
+        lvis_vocabs.append(
+            {
+                "name": row["name"],
+                "synset": synset,
+                "lvis_id": int(row["id"]),
+                "merged_id": merged_id,
+            }
+        )
+
+        if not is_coco:
+            idx += 1
+
+    lvis_vocabs = pd.DataFrame.from_records(lvis_vocabs).set_index("synset")
+
+    merged_len = len(set(list(lvis_vocabs.index) + list(coco_vocabs.index)))
+
+    logging.info(f"There are {merged_len} tokens after merge.")
+
+    # 2.
+    coco_train = read_coco_metadata(
+        os.path.join(HOME, "annotations/instances_train2017.json")
+    )
+    coco_val = read_coco_metadata(
+        os.path.join(HOME, "annotations/instances_val2017.json")
+    )
+
+    coco_images = pd.DataFrame.from_records(coco_train["images"] + coco_val["images"])
+    coco_images = coco_images[["coco_url", "id"]].rename(columns={"id": "image_id"})
+
+    coco_annotations = pd.DataFrame.from_records(coco_train["annotations"] + coco_val["annotations"])
+    unmerged_category_ids = [x["coco_cat_id"] for x in unmerged_synset]
+    coco_annotations_unmerged = coco_annotations[coco_annotations.category_id.isin(unmerged_category_ids)]
+    logging.info(f"Found {len(coco_annotations_unmerged)} COCO annotations related to unmerged synsets/ids.")
+
+    coco_metadata_unmerged = pd.merge(coco_annotations_unmerged, coco_images, how="left", on=["image_id"])
+
+    # 3.
+    lvis_annotations = lvis_metadata["annotations"]
+    lvis_annotations = pd.DataFrame.from_records(lvis_annotations)
+
+    lvis_images = lvis_metadata["images"]
+    lvis_images = pd.DataFrame.from_records(lvis_images).rename(columns={"id": "image_id"})[["image_id", "coco_url"]].set_index("coco_url")
+
+    lvis_ids_map = {k: v for k, v in zip(lvis_vocabs.lvis_id.tolist(), lvis_vocabs.merged_id.tolist())}
+    coco_ids_map = {k: v for k, v in zip(coco_vocabs.coco_id.tolist(), coco_vocabs.merged_id.tolist())}
+
+    for _, a in lvis_annotations.iterrows():
+        a["category_id"] = lvis_ids_map[a["category_id"]]
+
+    new_records = []
+    annotation_id = len(lvis_annotations)
+    for _, c in coco_metadata_unmerged.iterrows():
+        try:
+            new_records.append(
+                {
+                    "id": annotation_id + 1,
+                    "image_id": lvis_images.loc[c["coco_url"]],
+                    "category_id": coco_ids_map[c["category_id"]],
+                    "segmentation": c["segmentation"],
+                    "area": c["area"],
+                    "bbox": c["bbox"],
+                }
+            )
+        except KeyError:
+            logging.warning(f"Image with url: {c['coco_url']} not found.")
+
+    new_df = pd.DataFrame.from_records(new_records)
+
+    logging.info(f"Before new annotations: {len(lvis_annotations)}")
+    lvis_annotations = pd.concat([lvis_annotations, new_df], axis=0)
+    logging.info(f"After new annotations: {len(lvis_annotations)}")
+
+    lvis_train["annotations"] = ast.literal_eval(
+        lvis_annotations.to_json(orient="records")
+    )
+
+    with open(os.path.join(HOME, "merged_lvis_v1_train.json"), "w") as f:
+        json.dump(lvis_train, f)
