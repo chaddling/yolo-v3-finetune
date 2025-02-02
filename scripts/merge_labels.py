@@ -1,8 +1,10 @@
-import ast
+import argparse
 import json
 import logging
 import os
 import pandas as pd
+
+from typing import List, Tuple
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -93,25 +95,16 @@ COCO_SYNSET_CATEGORIES = [
     {"synset": "toothbrush.n.01", "coco_cat_id": 90},
 ]
 
+def map_merged_idx(lvis_categories: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
+    """
+    Returns two dataframes corresponding to the COCO/LVIS dataset, where mapping the original
+    category ids to a new merged index. Since we use a model pretrained on COCO, their indices
+    go first in the order and the rest, non-overlapping LVIS categories receive a new index.
 
-def read_coco_metadata(file_path: str) -> dict:
-    with open(file_path, "r") as f:
-        metadata = json.load(f)
-    return metadata
-
-
-if __name__ == "__main__":
-    lvis_train = os.path.join(HOME, "lvis_v1_train.json")
-    try:
-        with open(lvis_train, "r") as f:
-            lvis_metadata = json.load(f)
-    except FileNotFoundError as e:
-        raise(e)
-    
-    lvis_categories = lvis_metadata["categories"]
-    lvis_categories = pd.DataFrame.from_records(lvis_categories)
-    lvis_categories = lvis_categories.set_index("synset")
-
+    :param lvis_categories: The object category metadata from LVIS.
+    :return: Dataframes that maps coco_id -> merged_id, and from lvis_id -> merged_id.
+        Also returns any unmerged COCO synset from COCO_SYNSET_CATEGORIES.
+    """
     unmerged_synset = []
     idx = 1
     coco_vocabs = []
@@ -135,7 +128,6 @@ if __name__ == "__main__":
         idx += 1
 
     coco_vocabs = pd.DataFrame.from_records(coco_vocabs).set_index("synset")
-
     logging.info(f"Found {len(unmerged_synset)} from COCO_SYNSET_CATEGORIES.")
 
     lvis_vocabs = []
@@ -159,36 +151,51 @@ if __name__ == "__main__":
             idx += 1
 
     lvis_vocabs = pd.DataFrame.from_records(lvis_vocabs).set_index("synset")
+    return coco_vocabs, lvis_vocabs, unmerged_synset
 
-    merged_len = len(set(list(lvis_vocabs.index) + list(coco_vocabs.index)))
 
-    logging.info(f"There are {merged_len} tokens after merge.")
+def get_unmerged_coco_annotations(
+    coco_annotations: pd.DataFrame, 
+    coco_images: pd.DataFrame, 
+    unmerged_synset: List
+) -> pd.DataFrame:
+    """
+    Retrieves the annotations associated with the unmerged category synset.
+    Joining annotations to images will add a "coco_url" column that uniquely 
+    identifies an image.
 
-    # 2.
-    coco_train = read_coco_metadata(
-        os.path.join(HOME, "annotations/instances_train2017.json")
-    )
-    coco_val = read_coco_metadata(
-        os.path.join(HOME, "annotations/instances_val2017.json")
-    )
-
-    coco_images = pd.DataFrame.from_records(coco_train["images"] + coco_val["images"])
-    coco_images = coco_images[["coco_url", "id"]].rename(columns={"id": "image_id"})
-
-    coco_annotations = pd.DataFrame.from_records(coco_train["annotations"] + coco_val["annotations"])
+    :param coco_annotations: Annotation metadata from the COCO dataset.
+    :param coco_images: Images metadata from the COCO dataset.
+    :param unmerged synset: Any categories from COCO_SYNSET_CATEGORIES that
+        are not found in the LVIS dataset.
+    :return: A merged dataframe containing annotations for the unmerged object category. 
+    """
     unmerged_category_ids = [x["coco_cat_id"] for x in unmerged_synset]
     coco_annotations_unmerged = coco_annotations[coco_annotations.category_id.isin(unmerged_category_ids)]
     logging.info(f"Found {len(coco_annotations_unmerged)} COCO annotations related to unmerged synsets/ids.")
 
     coco_metadata_unmerged = pd.merge(coco_annotations_unmerged, coco_images, how="left", on=["image_id"])
 
-    # 3.
-    lvis_annotations = lvis_metadata["annotations"]
-    lvis_annotations = pd.DataFrame.from_records(lvis_annotations)
+    return coco_metadata_unmerged
 
-    lvis_images = lvis_metadata["images"]
-    lvis_images = pd.DataFrame.from_records(lvis_images).rename(columns={"id": "image_id"})[["image_id", "coco_url"]].set_index("coco_url")
 
+def apply_new_category_idx(
+    coco_vocabs: pd.DataFrame, 
+    lvis_vocabs: pd.DataFrame,
+    lvis_annotations: pd.DataFrame,
+    lvis_images: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    1. Maps the loaded LVIS annotation metadata (lvis_annotations)'s category id to the merged index.
+    2. Adds extra annotations to the LVIS annotations for the unmerged COCO object, by matching the corresponding
+    "coco_url".
+
+    :param coco_vocabs: Dataframe contanining a map of coco_id -> merged_id.
+    :param lvis_vocabs: Dataframe contaiing a map of lvis_id -> merged_id.
+    :param lvis_annotations: Dataframe containing the loaded, unmodified LVIS dataset annotations.
+    :param lvis_images: Dataframe containing the LVIS images metadata.
+    :return: A dataframe of LVIS dataset annotations containing the merged index + extra annotations from COCO.
+    """
     lvis_ids_map = {k: v for k, v in zip(lvis_vocabs.lvis_id.tolist(), lvis_vocabs.merged_id.tolist())}
     coco_ids_map = {k: v for k, v in zip(coco_vocabs.coco_id.tolist(), coco_vocabs.merged_id.tolist())}
 
@@ -212,15 +219,76 @@ if __name__ == "__main__":
         except KeyError:
             logging.warning(f"Image with url: {c['coco_url']} not found.")
 
-    new_df = pd.DataFrame.from_records(new_records)
+    new_annotations = pd.DataFrame.from_records(new_records)
 
     logging.info(f"Before new annotations: {len(lvis_annotations)}")
-    lvis_annotations = pd.concat([lvis_annotations, new_df], axis=0)
-    logging.info(f"After new annotations: {len(lvis_annotations)}")
+    merged_annotations = pd.concat([lvis_annotations, new_annotations], axis=0)
+    logging.info(f"After new annotations: {len(merged_annotations)}")
+    return merged_annotations
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="lvis",
+        required=False,
+        help="Dataset name"
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        choices=("train", "val", "test"),
+        required=True,
+        help="Dataset split to be processed."
+    )
+    args = parser.parse_args()
+
+    lvis_train = os.path.join(HOME, f"{args.dataset}_v1_{args.split}.json")
+    try:
+        with open(lvis_train, "r") as f:
+            lvis_metadata = json.load(f)
+    except FileNotFoundError as e:
+        raise(e)
+    
+    lvis_categories = lvis_metadata["categories"]
+    lvis_categories = pd.DataFrame.from_records(lvis_categories)
+    lvis_categories = lvis_categories.set_index("synset")
+
+    coco_vocabs, lvis_vocabs, unmerged_synset = map_merged_idx(lvis_categories)
+    merged_len = len(set(list(lvis_vocabs.index) + list(coco_vocabs.index)))
+    logging.info(f"There are {merged_len} tokens after merge.")
+
+    coco_train = json.load(
+        open(os.path.join(HOME, "annotations/instances_train2017.json"), "r")
+    )
+    coco_val = json.load(
+        open(os.path.join(HOME, "annotations/instances_val2017.json"), "r")
+    )
+    coco_images = pd.DataFrame.from_records(coco_train["images"] + coco_val["images"])
+    coco_images = coco_images[["coco_url", "id"]].rename(columns={"id": "image_id"})
+    coco_annotations = pd.DataFrame.from_records(coco_train["annotations"] + coco_val["annotations"])
+
+    coco_metadata_unmerged = get_unmerged_coco_annotations(coco_annotations, coco_images, unmerged_synset)
+
+    lvis_annotations = lvis_metadata["annotations"]
+    lvis_annotations = pd.DataFrame.from_records(lvis_annotations)
+
+    lvis_images = lvis_metadata["images"]
+    lvis_images = pd.DataFrame.from_records(lvis_images).rename(columns={"id": "image_id"})[["image_id", "coco_url"]].set_index("coco_url")
+
+    merged_annotations = apply_new_category_idx(
+        coco_vocabs,
+        lvis_vocabs,
+        lvis_annotations,
+        lvis_images,
+    )
 
     lvis_metadata["annotations"] = [
-        x.to_dict() for _, x in lvis_annotations.iterrows()
+        x.to_dict() for _, x in merged_annotations.iterrows()
     ]
-
-    with open(os.path.join(HOME, "merged_lvis_v1_train.json"), "w") as f:
+    with open(os.path.join(HOME, f"merged_{args.dataset}_v1_{args.split}.json"), "w") as f:
         json.dump(lvis_metadata, f)
