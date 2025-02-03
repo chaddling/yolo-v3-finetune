@@ -29,14 +29,14 @@ class YOLOLoss(object):
         self.mse = torch.nn.MSELoss(reduction="none")
 
         self.num_classes = num_classes
-        self.stride = stride
+        self.stride = torch.tensor(stride).to("cuda").detach()
         self.n_cells = input_image_size / stride
 
         anchors = all_anchors[anchors_idx]
         na = len(anchors)
         self.all_anchors = torch.tensor(all_anchors).view(-1, 2)
 
-        self.anchors = torch.tensor(anchors).view(-1, 2)
+        self.anchors = torch.tensor(anchors).view(-1, 2).to("cuda").detach()
         self.anchor_masks = [anchors_idx + (i+1) * na for i in range(na // 2)]
 
         self.ignore_threshold = ignore_threshold        
@@ -44,12 +44,10 @@ class YOLOLoss(object):
 
     def __call__(self, preds: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
         bs, na, nx, ny, _ = preds.shape
-        stride = torch.tensor(self.stride).to("cuda")
-        anchors = self.anchors.to("cuda")
 
         with torch.no_grad():
             pred_box, pred_obj, pred_class = torch.split(preds, split_size_or_sections=[4, 1, self.num_classes], dim=-1)
-            pred_box = get_box_coordinates(pred_box, anchors, stride)
+            pred_box = get_box_coordinates(pred_box, self.anchors, self.stride)
 
             batch_idx, label = torch.split(label, split_size_or_sections=[1, 5], dim=-1)
             batch_idx = batch_idx.view(-1, 1)
@@ -62,7 +60,7 @@ class YOLOLoss(object):
             obj_mask = (best_anchor_idx >= self.anchor_masks[0]) * (best_anchor_idx <= self.anchor_masks[-1])
             obj_mask = obj_mask.squeeze()
 
-            grid_idx = make_grid_idx(label, stride)
+            grid_idx = make_grid_idx(label, self.stride)
             label_class = make_one_hot_label(label, self.num_classes)
             
             batch_idx = batch_idx[obj_mask]
@@ -95,7 +93,7 @@ class YOLOLoss(object):
         
         box_loss = self.mse(
             pred_box[bs_idx, a_idx, x_idx, y_idx, :], 
-            standardize_label_box(label_box, best_anchor_idx, anchors, stride)
+            standardize_label_box(label_box, best_anchor_idx, self.anchors, self.stride)
         ).sum()
 
         return object_loss + class_loss + box_loss
