@@ -18,7 +18,7 @@ dataloader:
         saturation: 0.0
 train:
   input_image_size: 512
-  num_classes: 1203
+  num_classes: 1204
   anchors: 
     - [10, 13, 16, 30, 33, 23] # stride 8
     - [30, 61, 62, 45, 59, 119] # stride 16
