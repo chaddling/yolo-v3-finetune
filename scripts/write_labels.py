@@ -1,7 +1,11 @@
 import argparse
 import json
+import logging
 import os
 import time
+import pandas as pd
+
+logging.getLogger().setLevel(logging.INFO)
 
 HOME = os.getenv("HOME")
 
@@ -74,18 +78,25 @@ if __name__ == "__main__":
     metadata = json.load(open(f"{HOME}/{annotation_file}", "r"))
     annotations = metadata["annotations"]
     
-    # stats = {m["id"]: (m["width"], m["height"]) for m in metadata["images"]}
+    images = pd.DataFrame.from_records(metadata["images"])
+    images = images[["id", "width", "height"]].set_index("id")
 
-    # ~40s to write ~1 million annotations
     # Not too slow, but could be improved by async?
     start = time.perf_counter()
     for a in annotations:
-        # id = a["image_id"]
-        # image_w, image_h = stats[id]
-
         # Convert (x, y) top-left box coordinate to box centre
         x, y, w, h = a["bbox"]
+        image_id = int(a["image_id"])
+        image_w, image_h = images.loc[image_id].values
+
         a["bbox"] = [x + w / 2, y + h / 2, w, h]
+        if x + w / 2 >= image_w or y + h / 2 >= image_h:
+            logging.warning(
+                f"Annotation with bbox centre ({x + w / 2}, {y + h / 2}) corresponding to image id {image_id}"
+                f" is out of bounds ({image_w}, {image_h}), it will be ignored."
+            )
+            continue
+
         write_annotation(a, label_path)
     
     elapsed = time.perf_counter() - start
