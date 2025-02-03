@@ -20,7 +20,7 @@ class PretrainedYOLOModel(torch.nn.Module):
         num_classes: int, # num_classes = # of classes in LVIS
         anchors: List[List[int]], # TODO anchors need to be scaled in loss calculation
         strides: List[int],
-        training: bool = True
+        train_all_layers: bool = False
     ):
         super().__init__()
 
@@ -31,8 +31,13 @@ class PretrainedYOLOModel(torch.nn.Module):
             "ultralytics/yolov3", 
             "custom", 
             os.path.join(weights_dir, "yolov3.pt"), 
-            **{"autoshape": False if training else True} 
+            **{"autoshape": False}
         )
+
+        if train_all_layers: 
+            for k, v in self._model.model.model.named_parameters():
+                v.requires_grad = True
+
         # Removes the top
         self._model.model.model = self._model.model.model[:-1]
 
