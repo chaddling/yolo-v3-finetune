@@ -19,7 +19,7 @@ if __name__ == "__main__":
     train_config = config.pop("train")
     model = PretrainedYOLOModel(
         weights_dir="./weights",
-        num_classes=1203,
+        num_classes=train_config["num_classes"],
         anchors=train_config["anchors"],
         strides=train_config["strides"],
     )
@@ -27,10 +27,10 @@ if __name__ == "__main__":
 
     trainer = L.Trainer(
         accelerator="gpu",
-        limit_train_batches=1,
-        limit_val_batches=1,
-        max_epochs=3,
-        log_every_n_steps=1,
+        limit_train_batches=1000,
+        limit_val_batches=10,
+        max_epochs=10,
+        log_every_n_steps=100,
         logger=TensorBoardLogger(save_dir="tensorboard")
     )
     trainer.fit(wrapped_model, train_loader, val_loader)
