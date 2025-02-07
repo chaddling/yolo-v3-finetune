@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torchvision.ops import box_iou, box_convert
 
 
-def get_box_coordinates(pred_box: torch.Tensor, anchors: torch.Tensor, stride: int):
+def get_box_coordinates(pred_box: torch.Tensor, anchors: torch.Tensor, stride: torch.Tensor):
     """
     Computes box coordinates at each (batch, anchor, cell) index given predictions [tx ty tw th].
     """
@@ -13,12 +13,10 @@ def get_box_coordinates(pred_box: torch.Tensor, anchors: torch.Tensor, stride: i
 
     grid = torch.zeros((nx, ny))
     idx = torch.cat(torch.where(grid == 0)).view(2, -1).T.view(1, 1, nx, ny, 2) # could probably be cached
-    offset = idx.repeat(bs, na, 1, 1, 1)
-    offset = offset.to("cuda")
+    offset = idx.repeat(bs, na, 1, 1, 1).to("cuda")
 
     anchors = anchors.view(1, na, 1, 1, 2)
     anchors = anchors.repeat(bs, 1, nx, ny, 1)
-    anchors = anchors.to("cuda")
 
     box[..., 0:2] = pred_box[..., 0:2].sigmoid() + offset * stride
     box[..., 2:4] = anchors * torch.exp(pred_box[..., 2:4])
@@ -83,8 +81,7 @@ def make_one_hot_label(label: torch.Tensor, num_classes: int):
     return one_hot[c.int()]
 
 
-def make_grid_idx(label: torch.Tensor, stride: int):
-    stride = torch.tensor(stride).float()
+def make_grid_idx(label: torch.Tensor, stride: torch.Tensor):
     xy = label[:, 1:3]
     xy = torch.div(xy - torch.fmod(xy, stride), stride)
     return xy
